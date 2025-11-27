@@ -1,0 +1,15 @@
+
+{
+	"name": "haga-repo",
+	"version": "0.1.0",
+	"private": true,
+	"main": "src/index.js",
+	"scripts": {
+		"start": "node src/index.js",
+		"dev": "echo \"No dev script defined\"",
+		"test": "echo \"No tests defined\""
+	},
+	"dependencies": {
+		"express": "^4.18.2"
+	}
+}
