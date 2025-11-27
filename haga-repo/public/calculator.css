@@ -1,10 +1,10 @@
 :root{--bg:#f6f8fb;--card:#fff;--accent:#2b6ef6}
 *{box-sizing:border-box}
 body{font-family:system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial; background:var(--bg); color:#111; margin:0; padding:20px}
-main.layout{display:flex;gap:20px;align-items:flex-start;max-width:1100px;margin:0 auto}
+main.layout{display:flex;gap:20px;align-items:flex-start;max-width:900px;margin:0 auto;justify-content:center}
 .calculator, .globe{background:var(--card);padding:16px;border-radius:8px;box-shadow:0 6px 18px rgba(20,20,30,0.06)}
-.calculator{width:420px}
-.globe{flex:1;display:flex;flex-direction:column;align-items:center}
+.calculator{width:420px;flex-shrink:0}
+.globe{width:420px;flex-shrink:0;display:flex;flex-direction:column;align-items:center}
 
 .display input{width:100%;padding:12px;font-size:20px;margin-bottom:8px;box-sizing:border-box}
 .keys{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}

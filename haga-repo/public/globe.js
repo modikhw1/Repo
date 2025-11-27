@@ -6,7 +6,7 @@
   const coordsText = document.getElementById('coordsText');
 
   let currentLatitude = null;
-  let currentLongitude = 0; // for drawing meridian only
+  let currentLongitude = 20; // for drawing meridian only - initialized to 20 to show immediately
   let calculatorMode = 'lat'; // 'lat' or 'lon'
   let foundPlace = null;
   let lookupTimer = null;
@@ -18,10 +18,16 @@
   let lastMouseX = 0;
   let lastMouseY = 0;
   
+  // Zoom state
+  let globeZoomScale = 1.0; // 1.0 = normal, 1.5 = max zoom
+  
+  // Target city for game mode
+  let targetCity = null;
+  
   const modeToggle = document.getElementById('modeToggle');
 
   function setCanvasSize(){
-    const size = Math.max(168, Math.floor(window.innerHeight / 3 * 1.4));
+    const size = Math.max(800, Math.floor(window.innerHeight * 1.19)); // 40% larger: 0.85 * 1.4 = 1.19
     canvas.width = size;
     canvas.height = size;
   }
@@ -30,7 +36,7 @@
 
   function hideGlobe(){
     ctx.clearRect(0,0,canvas.width,canvas.height);
-    weatherInfo.textContent = 'Enter latitude/longitude to find nearest city.';
+    if(weatherInfo) weatherInfo.textContent = 'Enter latitude/longitude to find nearest city.';
     foundPlace = null;
   }
 
@@ -40,12 +46,30 @@
   }
 
   // Draw the entire scene: parallel back, sphere, parallel front, markers
+  function updateRotationFeedback() {
+    const rotXEl = document.getElementById('rotationX');
+    const rotYEl = document.getElementById('rotationY');
+    
+    if(rotXEl) rotXEl.textContent = globeRotationX.toFixed(1) + '°';
+    if(rotYEl) rotYEl.textContent = globeRotationY.toFixed(1) + '°';
+  }
+
   function drawWhole(latValue){
     const cx = canvas.width/2;
     const cy = canvas.height/2;
-    const r = Math.max(10, canvas.width/2 - 4);
+    const baseR = Math.max(10, canvas.width/2 - 4);
+    const r = baseR * globeZoomScale; // Apply zoom
 
     ctx.clearRect(0,0,canvas.width,canvas.height);
+    
+    // Update rotation feedback display
+    updateRotationFeedback();
+    
+    // Set up circular clipping path to prevent square edges
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, r + 5, 0, Math.PI*2); // Slightly larger to prevent edge artifacts
+    ctx.clip();
 
     const grad = ctx.createRadialGradient(cx - r*0.3, cy, r*0.1, cx, cy, r);
     grad.addColorStop(0, '#5db3ff');
@@ -53,7 +77,7 @@
 
     // draw back meridian if in lon mode
     if(calculatorMode === 'lon' && currentLongitude !== null){
-      drawMeridian(currentLongitude, {strokeStyle: 'rgba(0,0,0,0.06)', lineWidth:3, backOnly:true});
+      drawMeridian(currentLongitude, {strokeStyle: 'rgba(0,0,0,0.06)', lineWidth:3, backOnly:true, radius:r});
     }
 
     // draw back parallel (if any)
@@ -62,7 +86,7 @@
       ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.moveTo(cx - r*0.95, cy); ctx.lineTo(cx + r*0.95, cy); ctx.stroke();
     } else {
-      drawParallel(latValue, {backOnly:true});
+      drawParallel(latValue, {backOnly:true, radius:r});
     }
 
     // draw sphere
@@ -72,36 +96,48 @@
     drawMapGrid(r);
 
     // draw front parallel
-    if(latValue !== null) drawParallel(latValue, {frontOnly:true});
+    if(latValue !== null) drawParallel(latValue, {frontOnly:true, radius:r});
     
     // draw front meridian if in lon mode
     if(calculatorMode === 'lon' && currentLongitude !== null){
-      drawMeridian(currentLongitude, {strokeStyle:'rgba(255,255,255,0.25)', lineWidth:2, frontOnly:true});
+      drawMeridian(currentLongitude, {strokeStyle:'rgba(255,255,255,0.25)', lineWidth:2, frontOnly:true, radius:r});
     }
 
-    if(foundPlace){
-      const p = projectLatLon(foundPlace.latitude, foundPlace.longitude);
+    // Restore context after clipping
+    ctx.restore();
+    
+    // Draw target city marker (game mode) - RED DOT
+    if(targetCity){
+      const p = projectLatLon(targetCity.lat, targetCity.lon, false, r);
       if(p.z >= 0){
-        const markerSize = Math.max(5, r*0.06);
-        const labelOffsetX = Math.max(7, r*0.08);
-        const labelOffsetY = Math.max(5, r*0.05);
+        const markerSize = Math.max(7, r*0.09);
+        const labelOffsetX = Math.max(10, r*0.10);
+        const labelOffsetY = Math.max(8, r*0.08);
         
+        // Red marker for target city
         ctx.beginPath();
         ctx.fillStyle = '#ff3333';
+        ctx.strokeStyle = '#cc0000';
+        ctx.lineWidth = 3;
         ctx.arc(p.x, p.y, markerSize, 0, Math.PI*2);
         ctx.fill();
+        ctx.stroke();
         
+        // City name
         ctx.textAlign = 'left';
         ctx.fillStyle = '#000';
-        ctx.font = 'bold 11px sans-serif';
-        ctx.fillText(foundPlace.name, p.x + labelOffsetX, p.y - labelOffsetY);
+        ctx.font = 'bold 14px sans-serif';
+        ctx.fillText('🎯 ' + targetCity.name, p.x + labelOffsetX, p.y - labelOffsetY - 8);
         
-        ctx.font = '9px sans-serif';
-        ctx.fillStyle = '#555';
-        ctx.fillText(`(${foundPlace.latitude.toFixed(1)}°, ${foundPlace.longitude.toFixed(1)}°)`, 
-                     p.x + labelOffsetX, p.y + Math.max(3, r*0.03));
+        // Coordinates - BIGGER
+        ctx.font = 'bold 13px sans-serif';
+        ctx.fillStyle = '#ff3333';
+        ctx.fillText(`(${targetCity.lat.toFixed(2)}°, ${targetCity.lon.toFixed(2)}°)`, 
+                     p.x + labelOffsetX, p.y + Math.max(6, r*0.05));
       }
     }
+
+    // Note: City search removed - game uses only lat/lon lines to aim at target
 
     // Show fixed longitude (prime meridian) used for searches
     ctx.fillStyle = '#333';
@@ -110,12 +146,16 @@
     ctx.fillText(`Lon: 0°`, cx, cy + r + 20);
   }
 
-  function projectLatLon(latDeg, lonDeg){
-    const cx = canvas.width/2, cy = canvas.height/2, r = Math.max(10, canvas.width/2 - 4);
+  function projectLatLon(latDeg, lonDeg, addLatOffset = false, radiusOverride = null){
+    const cx = canvas.width/2, cy = canvas.height/2;
+    const baseR = Math.max(10, canvas.width/2 - 4);
+    const r = radiusOverride !== null ? radiusOverride : (baseR * globeZoomScale);
     
     // Apply globe rotation
     const phi = latDeg * Math.PI/180;
-    const lambda = (lonDeg + globeRotationX) * Math.PI/180;
+    // Add 12.9° offset to longitude for latitude lines to center them better
+    const latOffsetDeg = addLatOffset ? 12.9 : 0;
+    const lambda = (lonDeg + globeRotationX + latOffsetDeg) * Math.PI/180;
     const tilt = globeRotationY * Math.PI/180;
     
     // 3D coordinates on sphere with rotation
@@ -151,42 +191,76 @@
 
   function drawParallel(latDeg, opts={}){
     const numPoints = 180;
-    const backPoints = [];
-    const frontPoints = [];
+    const r = opts.radius || (Math.max(10, canvas.width/2 - 4) * globeZoomScale);
     
-    // Sample points around the entire latitude circle
+    // Sample all points around the latitude circle with z-depth
+    const points = [];
     for(let i = 0; i <= numPoints; i++){
       const lonDeg = (i / numPoints) * 360 - 180;
-      const p = projectLatLon(latDeg, lonDeg);
+      const p = projectLatLon(latDeg, lonDeg, true, r); // Add latitude offset for centering
+      points.push({...p, lon: lonDeg});
+    }
+    
+    // Separate into segments based on visibility
+    const frontSegments = [];
+    const backSegments = [];
+    let currentFrontSegment = [];
+    let currentBackSegment = [];
+    
+    for(let i = 0; i < points.length; i++){
+      const p = points[i];
+      
+      // Use normalized longitude to determine if point should be visible
+      // Account for rotation: visible range is roughly where z >= 0
       if(p.z >= 0){
-        frontPoints.push(p);
+        // Front side
+        if(currentBackSegment.length > 0) {
+          backSegments.push(currentBackSegment);
+          currentBackSegment = [];
+        }
+        currentFrontSegment.push(p);
       } else {
-        backPoints.push(p);
+        // Back side
+        if(currentFrontSegment.length > 0) {
+          frontSegments.push(currentFrontSegment);
+          currentFrontSegment = [];
+        }
+        currentBackSegment.push(p);
       }
     }
+    
+    // Push remaining segments
+    if(currentFrontSegment.length > 0) frontSegments.push(currentFrontSegment);
+    if(currentBackSegment.length > 0) backSegments.push(currentBackSegment);
 
-    // Draw back half (behind the globe)
-    if(backPoints.length > 1 && !opts.frontOnly){
-      ctx.beginPath();
-      ctx.moveTo(backPoints[0].x, backPoints[0].y);
-      for(let i = 1; i < backPoints.length; i++){
-        ctx.lineTo(backPoints[i].x, backPoints[i].y);
-      }
-      ctx.strokeStyle = opts.backOnly ? 'rgba(0,0,0,0.06)' : 'rgba(0,0,0,0.25)';
-      ctx.lineWidth = opts.backOnly ? 3 : 4;
-      ctx.stroke();
+    // Draw back segments (only if truly behind and not in frontOnly mode)
+    if(!opts.frontOnly){
+      backSegments.forEach(segment => {
+        if(segment.length < 2) return;
+        ctx.beginPath();
+        ctx.moveTo(segment[0].x, segment[0].y);
+        for(let i = 1; i < segment.length; i++){
+          ctx.lineTo(segment[i].x, segment[i].y);
+        }
+        ctx.strokeStyle = opts.backOnly ? 'rgba(0,0,0,0.06)' : 'rgba(0,0,0,0.15)';
+        ctx.lineWidth = opts.backOnly ? 2 : 3;
+        ctx.stroke();
+      });
     }
 
-    // Draw front half (visible on the globe)
-    if(frontPoints.length > 1 && !opts.backOnly){
-      ctx.beginPath();
-      ctx.moveTo(frontPoints[0].x, frontPoints[0].y);
-      for(let i = 1; i < frontPoints.length; i++){
-        ctx.lineTo(frontPoints[i].x, frontPoints[i].y);
-      }
-      ctx.strokeStyle = 'rgba(255,255,255,0.95)';
-      ctx.lineWidth = 3;
-      ctx.stroke();
+    // Draw front segments (only if not in backOnly mode)
+    if(!opts.backOnly){
+      frontSegments.forEach(segment => {
+        if(segment.length < 2) return;
+        ctx.beginPath();
+        ctx.moveTo(segment[0].x, segment[0].y);
+        for(let i = 1; i < segment.length; i++){
+          ctx.lineTo(segment[i].x, segment[i].y);
+        }
+        ctx.strokeStyle = 'rgba(74,222,128,0.95)'; // Green tint for latitude (#4ade80)
+        ctx.lineWidth = 3;
+        ctx.stroke();
+      });
     }
   }
 
@@ -194,12 +268,14 @@
     const numPoints = 180;
     const backPoints = [];
     const frontPoints = [];
+    const r = opts.radius || (Math.max(10, canvas.width/2 - 4) * globeZoomScale);
     
     // Sample points along the meridian from south to north pole
     for(let i = 0; i <= numPoints; i++){
       const latDeg = (i / numPoints) * 180 - 90;
-      const p = projectLatLon(latDeg, lonDeg);
-      if(p.z >= 0){
+      const p = projectLatLon(latDeg, lonDeg, false, r); // No latitude offset for longitude lines
+      // Use small negative threshold
+      if(p.z >= -0.5){
         frontPoints.push(p);
       } else {
         backPoints.push(p);
@@ -208,24 +284,28 @@
 
     // Draw back half (behind the globe)
     if(opts.backOnly){
-      if(backPoints.length < 2) return;
+      const trulyHidden = backPoints.filter(p => p.z < -1);
+      if(trulyHidden.length < 2) return;
       ctx.beginPath();
-      ctx.moveTo(backPoints[0].x, backPoints[0].y);
-      for(let i=1; i<backPoints.length; i++) ctx.lineTo(backPoints[i].x, backPoints[i].y);
+      ctx.moveTo(trulyHidden[0].x, trulyHidden[0].y);
+      for(let i=1; i<trulyHidden.length; i++) ctx.lineTo(trulyHidden[i].x, trulyHidden[i].y);
       ctx.strokeStyle = opts.strokeStyle || 'rgba(0,0,0,0.06)';
-      ctx.lineWidth = opts.lineWidth || 3;
+      ctx.lineWidth = opts.lineWidth || 2;
       ctx.stroke();
       return;
     }
 
     // Draw back half
     if(backPoints.length > 1){
-      ctx.beginPath();
-      ctx.moveTo(backPoints[0].x, backPoints[0].y);
-      for(let i=1; i<backPoints.length; i++) ctx.lineTo(backPoints[i].x, backPoints[i].y);
-      ctx.strokeStyle = 'rgba(0,0,0,0.25)';
-      ctx.lineWidth = 4;
-      ctx.stroke();
+      const trulyHidden = backPoints.filter(p => p.z < -1);
+      if(trulyHidden.length > 1) {
+        ctx.beginPath();
+        ctx.moveTo(trulyHidden[0].x, trulyHidden[0].y);
+        for(let i=1; i<trulyHidden.length; i++) ctx.lineTo(trulyHidden[i].x, trulyHidden[i].y);
+        ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+      }
     }
     
     // Draw front half (visible on the globe)
@@ -233,7 +313,7 @@
       ctx.beginPath();
       ctx.moveTo(frontPoints[0].x, frontPoints[0].y);
       for(let i=1; i<frontPoints.length; i++) ctx.lineTo(frontPoints[i].x, frontPoints[i].y);
-      ctx.strokeStyle = 'rgba(96,165,250,0.95)';
+      ctx.strokeStyle = 'rgba(96,165,250,0.95)'; // Blue tint for longitude (#60a5fa)
       ctx.lineWidth = 3;
       ctx.stroke();
     }
@@ -281,7 +361,7 @@
           
           const points = coords.map(coord => {
             const [lon, lat] = coord;
-            const p = projectLatLon(lat, lon);
+            const p = projectLatLon(lat, lon, false, r);
             return {...p, visible: p.z >= 0};
           });
 
@@ -433,20 +513,32 @@ out center;`;
 
 
   window.updateCoordinate = async function(value){
-    console.log('📍 updateCoordinate called with:', value, 'mode:', calculatorMode);
+    // Get current mode from toggle
+    const currentMode = modeToggle && modeToggle.checked ? 'lon' : 'lat';
+    console.log('📍 updateCoordinate called with:', value, 'current mode:', currentMode);
     if(typeof value !== 'number' || !isFinite(value)) { hideGlobe(); return; }
     
-    if(calculatorMode === 'lat'){
-      if(value < -90 || value > 90){ ctx.clearRect(0,0,canvas.width,canvas.height); weatherInfo.textContent = 'Latitude out of range (-90..90).'; return; }
+    if(currentMode === 'lat'){
+      if(value < -90 || value > 90){ 
+        ctx.clearRect(0,0,canvas.width,canvas.height); 
+        if(weatherInfo) weatherInfo.textContent = 'Latitude out of range (-90..90).'; 
+        return; 
+      }
       currentLatitude = value;
+      calculatorMode = 'lat';
     } else {
-      if(value < -180 || value > 180){ ctx.clearRect(0,0,canvas.width,canvas.height); weatherInfo.textContent = 'Longitude out of range (-180..180).'; return; }
+      if(value < -180 || value > 180){ 
+        ctx.clearRect(0,0,canvas.width,canvas.height); 
+        if(weatherInfo) weatherInfo.textContent = 'Longitude out of range (-180..180).'; 
+        return; 
+      }
       currentLongitude = value;
+      calculatorMode = 'lon';
     }
     drawWhole(currentLatitude);
     
     if(calculatorMode === 'lat'){
-      weatherInfo.textContent = `Latitude: ${value.toFixed(4)}° — finding nearest city...`;
+      if(weatherInfo) weatherInfo.textContent = `Latitude: ${value.toFixed(4)}° — finding nearest city...`;
       if(lookupTimer) clearTimeout(lookupTimer);
       lookupTimer = setTimeout(async ()=>{
         if(coordsText) coordsText.textContent = `Lat: ${currentLatitude.toFixed(4)}°, Lon: 0.0000°`;
@@ -454,14 +546,14 @@ out center;`;
           const place = await findNearestPlaceAroundPoint(currentLatitude, 0);
           foundPlace = place;
           if(place){
-            weatherInfo.textContent = `Nearest: ${place.name}${place.admin1?(', '+place.admin1):''}${place.country?(', '+place.country):''}`;
+            if(weatherInfo) weatherInfo.textContent = `Nearest: ${place.name}${place.admin1?(', '+place.admin1):''}${place.country?(', '+place.country):''}`;
           } else {
             foundPlace = null;
-            weatherInfo.textContent = `No city found nearby`;
+            if(weatherInfo) weatherInfo.textContent = `No city found nearby`;
           }
           drawWhole(currentLatitude);
         }catch(err){ 
-          weatherInfo.textContent = 'City lookup failed: ' + (err.message || 'unknown'); 
+          if(weatherInfo) weatherInfo.textContent = 'City lookup failed: ' + (err.message || 'unknown'); 
           console.error('Lookup error:', err); 
           drawWhole(currentLatitude);
         }
@@ -471,7 +563,7 @@ out center;`;
       const isVisible = isLongitudeVisible(value);
       
       const visibilityWarning = !isVisible ? ' ⚠️ (on back of globe)' : '';
-      weatherInfo.textContent = `Longitude: ${value.toFixed(4)}°${visibilityWarning} — finding nearest city...`;
+      if(weatherInfo) weatherInfo.textContent = `Longitude: ${value.toFixed(4)}°${visibilityWarning} — finding nearest city...`;
       
       if(lookupTimer) clearTimeout(lookupTimer);
       lookupTimer = setTimeout(async ()=>{
@@ -482,14 +574,14 @@ out center;`;
           if(place){
             const placeVisible = isLongitudeVisible(place.longitude);
             const visibilityNote = placeVisible ? '' : ' ⚠️ (behind globe)';
-            weatherInfo.textContent = `Nearest: ${place.name}${place.admin1?(', '+place.admin1):''}${place.country?(', '+place.country):''}${visibilityNote}`;
+            if(weatherInfo) weatherInfo.textContent = `Nearest: ${place.name}${place.admin1?(', '+place.admin1):''}${place.country?(', '+place.country):''}${visibilityNote}`;
           } else {
             foundPlace = null;
-            weatherInfo.textContent = `No city found nearby`;
+            if(weatherInfo) weatherInfo.textContent = `No city found nearby`;
           }
           drawWhole(currentLatitude);
         }catch(err){ 
-          weatherInfo.textContent = 'City lookup failed: ' + (err.message || 'unknown'); 
+          if(weatherInfo) weatherInfo.textContent = 'City lookup failed: ' + (err.message || 'unknown'); 
           console.error('Lookup error:', err); 
           drawWhole(currentLatitude);
         }
@@ -499,17 +591,76 @@ out center;`;
 
   // Backward compatibility
   window.updateLatitude = window.updateCoordinate;
+  
+  window.rotateGlobeTo = function(lat, lon) {
+    console.log('\n🔄 ====== GLOBE ROTATION APPLIED ======');
+    console.log('🎯 CENTERING VIEW ON:');
+    console.log('  LAT:', lat.toFixed(1), '°');
+    console.log('  LON:', lon.toFixed(1), '°');
+    console.log('');
+    console.log('⚙️ ROTATION STATE BEFORE:');
+    console.log('  globeRotationX:', globeRotationX.toFixed(1), '° (horizontal)');
+    console.log('  globeRotationY:', globeRotationY.toFixed(1), '° (vertical)');
+    console.log('');
+    
+    // Store old values for comparison
+    const oldX = globeRotationX;
+    const oldY = globeRotationY;
+    
+    // Rotate globe to show the specified coordinates
+    // globeRotationX controls horizontal rotation (negative LON to center it)
+    globeRotationX = -lon;
+    
+    // Limit vertical rotation (negative LAT for proper viewing angle)
+    const targetY = -lat;
+    globeRotationY = Math.max(-12, Math.min(12, targetY));
+    
+    console.log('⚙️ ROTATION STATE AFTER:');
+    console.log('  globeRotationX:', globeRotationX.toFixed(1), '° (Δ', (globeRotationX - oldX).toFixed(1), '°)');
+    console.log('  globeRotationY:', globeRotationY.toFixed(1), '° (Δ', (globeRotationY - oldY).toFixed(1), '°)');
+    console.log('');
+    console.log('💡 INTERPRETATION:');
+    console.log('  • globeRotationX = -LON centers longitude horizontally');
+    console.log('  • globeRotationY = -LAT (clamped ±12°) tilts view vertically');
+    console.log('  • The point (', lat.toFixed(1), '°,', lon.toFixed(1), '°) should now be front-center');
+    console.log('');
+    console.log('🔍 USE THIS INFO TO GUIDE ROTATION BEHAVIOR:');
+    console.log('  ► If you want different start rotation, tell me desired');
+    console.log('    globeRotationX and globeRotationY values for game start');
+    console.log('  ► If you want different intersection view, describe what');
+    console.log('    you see vs. what you want to see');
+    console.log('=========================================\n');
+    
+    drawWhole(currentLatitude);
+  };
 
   const modeLabel = document.getElementById('modeLabel');
   
   if(modeToggle){
     modeToggle.addEventListener('change', () => {
+      console.log('🌍 Globe.js: Toggle changed to:', modeToggle.checked ? 'LON' : 'LAT');
+      
       calculatorMode = modeToggle.checked ? 'lon' : 'lat';
       if(modeLabel){
         modeLabel.textContent = calculatorMode.toUpperCase();
         modeLabel.style.color = calculatorMode === 'lat' ? '#0a5f38' : '#0a3d5f';
       }
-      drawWhole(currentLatitude);
+      
+      // If game is active, trigger game display update
+      const gameActive = window.isGameActive && window.isGameActive();
+      console.log('🎮 Game active?', gameActive);
+      
+      if(gameActive) {
+        console.log('🎮 Calling window.updateGameDisplay...');
+        if(window.updateGameDisplay) {
+          window.updateGameDisplay();
+        } else {
+          console.log('❌ window.updateGameDisplay not found!');
+        }
+      } else {
+        console.log('🌍 Drawing globe (game not active)');
+        drawWhole(currentLatitude);
+      }
     });
   }
 
@@ -550,6 +701,43 @@ out center;`;
   });
 
   canvas.style.cursor = 'grab';
+
+  // Keyboard shortcut - G key to toggle LAT/LON mode
+  document.addEventListener('keydown', (e) => {
+    if(e.key === 'g' || e.key === 'G'){
+      if(modeToggle){
+        modeToggle.checked = !modeToggle.checked;
+        // Trigger the change event programmatically
+        const event = new Event('change', { bubbles: true });
+        modeToggle.dispatchEvent(event);
+      }
+    }
+  });
+
+  // Expose function for game to control globe rotation
+  window.setGlobeRotation = function(rotX, rotY) {
+    globeRotationX = rotX;
+    globeRotationY = rotY;
+    drawWhole(currentLatitude);
+  };
+  
+  // Expose function for game to control globe zoom
+  window.setGlobeZoom = function(zoomScale) {
+    globeZoomScale = Math.max(1.0, Math.min(1.5, zoomScale)); // Clamp between 1.0 and 1.5
+    drawWhole(currentLatitude);
+  };
+
+  // Expose function for game to set target city marker
+  window.setTargetCity = function(lat, lon, name) {
+    targetCity = { lat, lon, name };
+    drawWhole(currentLatitude);
+  };
+
+  // Expose function to clear target city
+  window.clearTargetCity = function() {
+    targetCity = null;
+    drawWhole(currentLatitude);
+  };
 
   drawWhole(currentLatitude);
 })();

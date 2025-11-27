@@ -48,6 +48,62 @@
     </style>
   </head>
   <body>
+    <!-- Game UI at the top -->
+    <section id="gameSection" style="max-width: 1200px; margin: 20px auto; padding: 20px; display: none; background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h2 style="margin: 0;">City Coordinate Game</h2>
+        <div style="display: flex; gap: 20px; align-items: center;">
+          <div id="gameTimer" style="font-size: 28px; font-weight: bold; color: #1e6fe0; font-family: monospace;">5:00</div>
+          <button id="startGameBtn" style="padding: 10px 20px; font-size: 16px; background: #22c55e; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold;">Start Game</button>
+          <button id="endGameBtn" style="display: none; padding: 10px 20px; font-size: 16px; background: #ef4444; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold;">End Game</button>
+        </div>
+      </div>
+      
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+        <div style="padding: 15px; background: #f0f9ff; border-radius: 6px; border-left: 4px solid #3b82f6;">
+          <div style="font-size: 14px; color: #1e40af; margin-bottom: 5px; font-weight: bold;">Current Target</div>
+          <div id="targetCity" style="font-size: 20px; font-weight: bold; color: #1e40af;">Click Start to Begin</div>
+        </div>
+        
+        <div style="padding: 15px; background: #fef3c7; border-radius: 6px; border-left: 4px solid #f59e0b;">
+          <div style="font-size: 14px; color: #92400e; margin-bottom: 5px; font-weight: bold;">Time Remaining</div>
+          <div style="display: flex; gap: 15px; align-items: center;">
+            <div>
+              <div style="font-size: 12px; color: #92400e;">City Timer</div>
+              <div id="cityTimer" style="font-size: 20px; font-weight: bold; color: #d97706; font-family: monospace;">30s</div>
+            </div>
+            <div>
+              <div style="font-size: 12px; color: #92400e;">Progress</div>
+              <div id="cityCounter" style="font-size: 20px; font-weight: bold; color: #d97706;">City 0/10</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Bonus Flag Quiz -->
+      <div id="bonusQuiz" style="display: none; margin-top: 20px; padding: 20px; background: linear-gradient(135deg, #fef3c7, #fde68a); border-radius: 8px; border: 3px solid #f59e0b; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);">
+        <div style="text-align: center; margin-bottom: 15px;">
+          <div style="font-size: 24px; font-weight: bold; color: #92400e; margin-bottom: 5px;">🎁 BONUS ROUND!</div>
+          <div style="font-size: 14px; color: #92400e;">Score 3500+! Which flag belongs to this city?</div>
+          <div style="font-size: 12px; color: #b45309; margin-top: 5px;">+1000 points if correct!</div>
+        </div>
+        <div id="bonusQuizOptions" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px;">
+          <!-- Flag options will be dynamically added here -->
+        </div>
+      </div>
+      
+      <!-- Score Display -->
+      <div id="scoreDisplay" style="display: none; margin-top: 20px; padding: 15px; background: #f0fdf4; border-radius: 6px; border: 2px solid #22c55e;">
+        <div style="font-size: 18px; font-weight: bold; color: #166534; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
+          <span>📊 Scores</span>
+          <span id="totalScore" style="color: #16a34a;">Total: 0 points</span>
+        </div>
+        <div id="scoreList" style="max-height: 300px; overflow-y: auto; background: white; border-radius: 4px; border: 1px solid rgba(0,0,0,0.1);">
+          <!-- Scores will be dynamically added here -->
+        </div>
+      </div>
+    </section>
+
     <main class="layout">
       <section class="calculator">
         <h1 style="display:flex; align-items:center; gap:12px;">
@@ -60,7 +116,93 @@
             </label>
           </div>
         </h1>
+        
+        <!-- Game Number Display (shown during game) -->
+        <div id="inlineRoller" style="display: none; margin-bottom: 15px; padding: 15px; background: linear-gradient(to bottom, #f0f0f0, #e0e0e0); border-radius: 8px; border: 2px solid #999;">
+          <div style="text-align: center; margin-bottom: 10px;">
+            <div style="font-size: 12px; color: #666; font-weight: bold;">AVAILABLE NUMBERS</div>
+          </div>
+          <div style="position: relative; height: 100px; display: flex; justify-content: center; align-items: flex-start; gap: 30px;">
+            <!-- Current number on platform with animation -->
+            <div style="text-align: center;">
+              <div id="currentNumberContainer" style="position: relative;">
+                <div id="currentNumber" style="font-size: 42px; font-weight: bold; color: white; background: linear-gradient(135deg, #4ade80, #22c55e); padding: 15px 25px; border-radius: 8px; border: 3px solid #16a34a; min-width: 80px; text-align: center; box-shadow: 0 4px 15px rgba(74, 222, 128, 0.4); animation: pulse 2s infinite;">0</div>
+              </div>
+              <div id="countdownBarContainer" style="margin-top: 5px; height: 6px; background: rgba(0,0,0,0.1); border-radius: 3px; width: 100%; overflow: hidden;">
+                <div id="countdownBar" style="height: 100%; background: linear-gradient(90deg, #4ade80, #22c55e); border-radius: 3px; width: 100%; box-shadow: 0 2px 8px rgba(74, 222, 128, 0.5); transition: width 0.1s linear;"></div>
+              </div>
+              <div style="font-size: 11px; color: #16a34a; font-weight: bold; margin-top: 3px; animation: blink 1.5s infinite;">✓ READY TO USE</div>
+            </div>
+            <!-- Next number waiting -->
+            <div style="text-align: center; opacity: 0.6;">
+              <div id="nextNumber" style="font-size: 32px; font-weight: bold; color: #666; background: #f5f5f5; padding: 12px 20px; border-radius: 8px; border: 2px solid #d1d5db; min-width: 70px; text-align: center;">0</div>
+              <div style="font-size: 10px; color: #999; margin-top: 5px;">Next →</div>
+            </div>
+          </div>
+          <div style="text-align: center; margin-top: 10px;">
+            <div style="font-size: 11px; color: #666;">Type operator then number. For negatives: -- becomes -() with cursor inside</div>
+          </div>
+        </div>
+        <style>
+          @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+          }
+          @keyframes blink {
+            0%, 50%, 100% { opacity: 1; }
+            25%, 75% { opacity: 0.5; }
+          }
+          @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25%, 75% { transform: translateX(-5px); }
+            50% { transform: translateX(5px); }
+          }
+          @keyframes crackGlass {
+            0% { opacity: 0; }
+            10% { opacity: 1; }
+            100% { opacity: 0; }
+          }
+          @keyframes magnifyPulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+          }
+          @keyframes breakFlash {
+            0% { opacity: 0; }
+            20% { opacity: 1; }
+            100% { opacity: 0; }
+          }
+          @keyframes breakShake {
+            0%, 100% { transform: translateX(0) rotate(0deg); }
+            10%, 30%, 50%, 70%, 90% { transform: translateX(-8px) rotate(-1deg); }
+            20%, 40%, 60%, 80% { transform: translateX(8px) rotate(1deg); }
+          }
+          @keyframes crackAppear {
+            0% { opacity: 0; transform: scaleX(0); }
+            100% { opacity: 1; transform: scaleX(1); }
+          }
+          @keyframes magnifyGrow {
+            0% { opacity: 0; width: 50%; height: 50%; }
+            50% { opacity: 1; width: 150%; height: 150%; }
+            100% { opacity: 0; width: 200%; height: 200%; }
+          }
+          @keyframes magnifyBounce {
+            0%, 100% { transform: scale(1); }
+            25% { transform: scale(1.08); }
+            50% { transform: scale(0.95); }
+            75% { transform: scale(1.05); }
+          }
+          @keyframes expandRing {
+            0% { width: 20px; height: 20px; opacity: 1; }
+            100% { width: 300px; height: 300px; opacity: 0; }
+          }
+          @keyframes growPulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); box-shadow: 0 0 25px rgba(59, 130, 246, 0.8); }
+          }
+        </style>
+
         <div class="display">
+          <div style="font-size: 11px; color: #666; margin-bottom: 3px; text-align: center;" id="modeIndicator">Current Mode: LAT</div>
           <input id="calcDisplay" readonly />
         </div>
 
@@ -70,15 +212,32 @@
           <button data-val="1">1</button><button data-val="2">2</button><button data-val="3">3</button><button data-op="-">−</button>
           <button data-val="0">0</button><button data-val=".">.</button><button id="eq">=</button><button data-op="+">+</button>
           <button id="clear" class="wide">C</button>
+          <button id="breakBtn" class="wide" style="background: #ef4444; color: white; font-weight: bold;" title="Shortcut: B">BREAK (B)</button>
+          <button id="magnifyBtn" class="wide" style="background: #3b82f6; color: white; font-weight: bold;" title="Shortcut: N">MAGNIFY (N)</button>
         </div>
 
         <div id="calcResult" class="info">Enter expression and press =</div>
       </section>
 
       <section class="globe">
-        <h2>Globe (latitude result)</h2>
+        <div id="cityTimerFuse" style="display: none; width: 100%; height: 8px; background: rgba(0,0,0,0.1); border-radius: 4px; margin-bottom: 8px; overflow: hidden;">
+          <div id="cityTimerBar" style="height: 100%; width: 100%; background: linear-gradient(90deg, #4ade80, #22c55e); border-radius: 4px; transition: width 0.1s linear, background 0.3s;"></div>
+        </div>
+        <div id="currentCoordinates" style="display: none; text-align: center; font-size: 14px; font-weight: bold; margin-bottom: 10px; color: #2563eb; padding: 4px 8px; background: rgba(37, 99, 235, 0.1); border-radius: 4px;">
+          <span id="cityCoordinateDisplay">City - LAT: 0.0°, LON: 0.0°</span>
+        </div>
         <canvas id="globeCanvas" aria-label="Globe"></canvas>
-        <div id="weatherInfo" class="info">Result between -90 and 90 will fetch nearest city & temperature (°C).</div>
+        <div id="rotationFeedback" style="display: none; margin-top: 10px; padding: 8px; background: rgba(0,0,0,0.05); border-radius: 4px; font-family: monospace; font-size: 12px; color: #333;">
+          <div style="margin-bottom: 4px;"><strong>Globe Rotation:</strong></div>
+          <div style="display: grid; grid-template-columns: auto 1fr; gap: 8px;">
+            <span style="color: #ef4444;">X-axis (Horizontal):</span>
+            <span id="rotationX">0.0°</span>
+            <span style="color: #22c55e;">Y-axis (Vertical):</span>
+            <span id="rotationY">0.0°</span>
+            <span style="color: #3b82f6;">Z-axis (Roll):</span>
+            <span id="rotationZ">0.0° (fixed)</span>
+          </div>
+        </div>
         <div class="info" style="margin-top:8px; display:flex; gap:8px; align-items:center;">
           <label for="coordsText" style="font-size:12px; color:#333;">Coords:</label>
           <div id="coordsText" aria-live="polite" style="flex:1; font-size:12px; padding:4px; color:#111;">Lat: —, Lon: —</div>
@@ -87,8 +246,11 @@
       </section>
     </main>
 
+
+
     <script src="https://unpkg.com/topojson@3"></script>
     <script src="/globe.js"></script>
     <script src="/calculator.js"></script>
+    <script src="/game.js"></script>
   </body>
 </html>

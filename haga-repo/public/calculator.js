@@ -6,26 +6,265 @@
 
   document.querySelectorAll('.keys button').forEach(btn => {
     btn.addEventListener('click', () => {
+      // Check if game is active - buttons work differently during game
+      const gameActive = window.isGameActive && window.isGameActive();
+      
+      console.log('🖱️ Button clicked:', btn.textContent, '| id:', btn.id, '| gameActive:', gameActive);
+      
+      if(gameActive) {
+        // During game, allow typing with buttons and equals
+        if (btn.id === 'clear') { 
+          expr = ''; 
+          display.value = window.getCurrentModeValue ? window.getCurrentModeValue().toFixed(1) : '20.0';
+          resultInfo.textContent = 'Type operator first, then press =';
+          return; 
+        }
+        if (btn.id === 'eq') { 
+          console.log('= button in game mode, expr:', expr);
+          evaluateExpression(); // This will call applyGameExpression during game
+          return; 
+        }
+        
+        const v = btn.getAttribute('data-val');
+        const op = btn.getAttribute('data-op');
+        
+        if (v !== null) { expr += v; display.value = expr; }
+        if (op !== null) { expr += op; display.value = expr; }
+        console.log('Updated expr in game mode:', expr);
+        return;
+      }
+      
+      // Normal mode (not during game)
       const v = btn.getAttribute('data-val');
       const op = btn.getAttribute('data-op');
 
       if (btn.id === 'clear') { expr = ''; display.value = ''; resultInfo.textContent = 'Enter expression and press ='; hideGlobe(); return; }
-      if (btn.id === 'eq') { evaluateExpression(); return; }
+      if (btn.id === 'eq') { 
+        console.log('= button in normal mode, expr:', expr);
+        evaluateExpression(); 
+        return; 
+      }
 
-      if (v !== null) { expr += v; display.value = expr; }
-      if (op !== null) { expr += op; display.value = expr; }
+      if (v !== null) { expr += v; display.value = expr; console.log('Added value:', v, '| expr now:', expr); }
+      if (op !== null) { expr += op; display.value = expr; console.log('Added operator:', op, '| expr now:', expr); }
     });
   });
 
   // keyboard support
   document.addEventListener('keydown', (e) => {
-    if ((/^[\d.+\-*/]$/).test(e.key)) { expr += e.key; display.value = expr; }
-    if (e.key === 'Enter') { evaluateExpression(); }
+    // Check if game is active
+    const gameActive = window.isGameActive && window.isGameActive();
+    
+    console.log('⌨️ Key pressed:', e.key, '| gameActive:', gameActive, '| current expr:', expr);
+    
+    if ((/^[\d.+\-*/()]$/).test(e.key)) {
+      e.preventDefault(); // Prevent default to control insertion manually
+      
+      // Get current cursor position
+      const cursorPos = display.selectionStart || expr.length;
+      
+      // Insert character at cursor position
+      expr = expr.slice(0, cursorPos) + e.key + expr.slice(cursorPos);
+      display.value = expr;
+      
+      // Auto-replace -- with -() for easier negative number input
+      if(gameActive && expr.endsWith('--')) {
+        expr = expr.slice(0, -2) + '-()';
+        display.value = expr;
+        resultInfo.textContent = 'Type negative number inside parentheses';
+        
+        // Position cursor before the closing paren
+        const newCursorPos = expr.length - 1;
+        if(display.setSelectionRange) {
+          display.setSelectionRange(newCursorPos, newCursorPos);
+        }
+        console.log('✏️ Auto-converted to:', expr, '| cursor at:', newCursorPos);
+        return;
+      }
+      // Also handle other operators followed by minus: +-, *-, /-
+      else if(gameActive && /[+*/]-$/.test(expr)) {
+        expr = expr.slice(0, -1) + '()';
+        display.value = expr;
+        resultInfo.textContent = 'Type negative number inside parentheses';
+        
+        // Position cursor before the closing paren
+        const newCursorPos = expr.length - 1;
+        if(display.setSelectionRange) {
+          display.setSelectionRange(newCursorPos, newCursorPos);
+        }
+        console.log('✏️ Auto-converted to:', expr, '| cursor at:', newCursorPos);
+        return;
+      }
+      
+      // Set cursor position after inserted character
+      const newCursorPos = cursorPos + 1;
+      if(display.setSelectionRange) {
+        display.setSelectionRange(newCursorPos, newCursorPos);
+      }
+      
+      console.log('✏️ Updated expr to:', expr, '| cursor at:', newCursorPos);
+    }
+    if (e.key === 'Enter') { 
+      e.preventDefault();
+      console.log('⏎ Enter pressed, calling evaluateExpression');
+      evaluateExpression();
+    }
     if (e.key === 'Backspace') { expr = expr.slice(0, -1); display.value = expr; }
-    if (e.key.toLowerCase() === 'c') { expr = ''; display.value = ''; hideGlobe(); resultInfo.textContent = 'Enter expression and press ='; }
+    if (e.key.toLowerCase() === 'c') { 
+      expr = ''; 
+      display.value = gameActive ? (window.getCurrentModeValue ? window.getCurrentModeValue().toFixed(1) : '') : ''; 
+      if(!gameActive) {
+        hideGlobe(); 
+        resultInfo.textContent = 'Enter expression and press =';
+      }
+    }
   });
 
+  function applyGameExpression() {
+    console.log('📝 Raw expression:', expr);
+    
+    // Try pattern 0: Just a negative number (no operator) - interpret as addition of that negative
+    // This ONLY applies when the platform number itself is negative
+    const justNegativeNumber = expr.match(/^-([0-9.]+)$/);
+    const platformNumber = window.getCurrentPlatformNumber ? window.getCurrentPlatformNumber() : null;
+    
+    if(justNegativeNumber && platformNumber !== null && platformNumber < 0) {
+      // Platform has a negative number, user typed a negative number
+      const typedNumber = -parseFloat(justNegativeNumber[1]);
+      
+      console.log('📝 Just negative number (platform is negative) | Typed:', typedNumber, '| Platform:', platformNumber);
+      
+      // Check if it matches platform number
+      if(Math.abs(typedNumber - platformNumber) < 0.0001) {
+        console.log('✅ Negative number matches platform, applying as addition');
+        
+        if(window.applyGameOperation) {
+          const operator = '+';
+          let displayText = `+(${platformNumber})`;
+          
+          console.log('📤 Calling applyGameOperation with:', operator, platformNumber);
+          window.applyGameOperation(operator, platformNumber);
+          resultInfo.textContent = `Applied: ${displayText}`;
+        }
+        
+        expr = '';
+        setTimeout(() => {
+          if(window.getCurrentModeValue) {
+            display.value = window.getCurrentModeValue().toFixed(1);
+          }
+        }, 10);
+        return;
+      }
+    }
+    
+    // Try pattern 1: Just an operator (recommended way)
+    const operatorOnly = expr.match(/^([+\-*/])$/);
+    
+    if(operatorOnly) {
+      // User typed just the operator - use current platform number
+      const operator = operatorOnly[1];
+      const platformNumber = window.getCurrentPlatformNumber ? window.getCurrentPlatformNumber() : null;
+      
+      if(platformNumber === null || platformNumber === undefined) {
+        resultInfo.textContent = 'No platform number available';
+        expr = '';
+        return;
+      }
+      
+      console.log('📝 Using platform number automatically | Operator:', operator, '| Platform number:', platformNumber);
+      
+      // Call game's apply operation function
+      if(window.applyGameOperation) {
+        let displayText = `${operator}${platformNumber}`;
+        if((operator === '-' || operator === '*' || operator === '/') && platformNumber < 0) {
+          displayText = `${operator}(${platformNumber})`;
+        }
+        
+        console.log('📤 Calling applyGameOperation with:', operator, platformNumber);
+        window.applyGameOperation(operator, platformNumber);
+        resultInfo.textContent = `Applied: ${displayText}`;
+      }
+      
+      expr = '';
+      setTimeout(() => {
+        if(window.getCurrentModeValue) {
+          display.value = window.getCurrentModeValue().toFixed(1);
+        }
+      }, 10);
+      return;
+    }
+    
+    // Try pattern 2: Operator followed by number (for validation)
+    // Supports: +5, -5, -(5), -(-5), +(7), *(−3), etc.
+    const operatorWithNumber = expr.match(/^([+\-*/])\(?([+\-]?[0-9.]+)\)?$/);
+    
+    if(operatorWithNumber) {
+      const operator = operatorWithNumber[1];
+      const typedNumber = parseFloat(operatorWithNumber[2]);
+      const platformNumber = window.getCurrentPlatformNumber ? window.getCurrentPlatformNumber() : null;
+      
+      console.log('📝 Operator with number | Operator:', operator, '| Typed:', typedNumber, '| Platform:', platformNumber);
+      
+      // Check if typed number matches platform number
+      if(platformNumber !== null && Math.abs(typedNumber - platformNumber) < 0.0001) {
+        console.log('✅ Numbers match, applying operation');
+        
+        if(window.applyGameOperation) {
+          let displayText = `${operator}${platformNumber}`;
+          if((operator === '-' || operator === '*' || operator === '/') && platformNumber < 0) {
+            displayText = `${operator}(${platformNumber})`;
+          }
+          
+          console.log('📤 Calling applyGameOperation with:', operator, platformNumber);
+          window.applyGameOperation(operator, platformNumber);
+          resultInfo.textContent = `Applied: ${displayText}`;
+        }
+        
+        expr = '';
+        setTimeout(() => {
+          if(window.getCurrentModeValue) {
+            display.value = window.getCurrentModeValue().toFixed(1);
+          }
+        }, 10);
+        return;
+      } else {
+        console.log('❌ Numbers do not match');
+        resultInfo.textContent = `Must use platform number ${platformNumber}, not ${typedNumber}`;
+        
+        // Trigger shake animation
+        const calculatorSection = document.querySelector('.calculator');
+        if(calculatorSection) {
+          calculatorSection.style.animation = 'shake 0.3s';
+          setTimeout(() => { calculatorSection.style.animation = ''; }, 300);
+        }
+        
+        expr = '';
+        display.value = window.getCurrentModeValue ? window.getCurrentModeValue().toFixed(1) : '';
+        return;
+      }
+    }
+    
+    // If no pattern matched, show error
+    resultInfo.textContent = 'Type operator (+, -, *, /) or operator+number';
+    expr = '';
+    display.value = window.getCurrentModeValue ? window.getCurrentModeValue().toFixed(1) : '';
+  }
+
   async function evaluateExpression() {
+    console.log('🔢 evaluateExpression called | expr:', expr, '| gameActive:', window.isGameActive ? window.isGameActive() : 'unknown');
+    
+    // Check if game is active
+    if(window.isGameActive && window.isGameActive()) {
+      applyGameExpression();
+      return;
+    }
+    
+    // Normal calculator evaluation
+    if(!expr || expr.trim() === '') {
+      resultInfo.textContent = 'Enter expression and press =';
+      return;
+    }
+    
     let value;
     try {
       if (!/^[0-9+\-*/().\s]+$/.test(expr)) throw new Error('Invalid characters');
@@ -39,12 +278,6 @@
 
     display.value = String(value);
     resultInfo.textContent = `Result: ${value}`;
-    // delegate to globe module
-    if(window.updateLatitude) {
-      await window.updateLatitude(value);
-    } else {
-      resultInfo.textContent += ' (globe module not loaded)';
-    }
     expr = '';
   }
 
