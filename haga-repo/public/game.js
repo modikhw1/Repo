@@ -184,46 +184,6 @@
     console.log('✅ handleOperatorInput returned:', result);
   };
   
-  // Old implementation removed - now using handleOperatorInput
-  window._applyGameOperation_OLD = function(operator, number) {
-    if(!gameActive) return;
-    
-    const modeToggle = document.getElementById('modeToggle');
-    const isLatMode = !modeToggle.checked;
-    let currentValue = isLatMode ? latitudeValue : longitudeValue;
-    
-    console.log('🎯 Manual operation:', operator, number, '| Current value:', currentValue, '| Mode:', isLatMode ? 'LAT' : 'LON');
-    
-    let result;
-    switch(operator) {
-      case '+': result = currentValue + number; break;
-      case '-': result = currentValue - number; break;
-      case '*': result = currentValue * number; break;
-      case '/': result = number !== 0 ? currentValue / number : currentValue; break;
-      default: return;
-    }
-    
-    console.log('✅ Result:', result);
-    
-    // Update memory for current mode
-    if(isLatMode) {
-      latitudeValue = result;
-      console.log('📝 Updated latitudeValue to:', latitudeValue);
-    } else {
-      longitudeValue = result;
-      console.log('📝 Updated longitudeValue to:', longitudeValue);
-    }
-    
-    // Update calculator display
-    updateCalculatorDisplay();
-    
-    // Update globe coordinates - this moves the lat/lon lines
-    if(window.updateCoordinate) {
-      console.log('🌍 Updating globe with:', result, 'mode:', isLatMode ? 'LAT' : 'LON');
-      window.updateCoordinate(result);
-    }
-  }; // End of OLD implementation
-
   function formatTime(seconds) {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
@@ -690,50 +650,6 @@
   }
   
   // Legacy version with number validation (kept for compatibility)
-  function handleOperatorInput_withValidation(op, numberUsed) {
-    if(!gameActive) return false;
-    if(currentNumber === null || currentNumber === undefined) return false;
-    
-    // VALIDATION: Check if correct number
-    const isCorrectNumber = Math.abs(numberUsed - currentNumber) < 0.0001;
-    
-    console.log('🔍 Validation | Platform number:', currentNumber, '| User typed:', numberUsed, '| Match:', isCorrectNumber);
-    
-    if(!isCorrectNumber) {
-      console.log('❌ Wrong number used! Expected:', currentNumber, 'Got:', numberUsed);
-      const resultInfo = document.getElementById('calcResult');
-      if(resultInfo) {
-        resultInfo.textContent = `⚠️ Must use current number (${currentNumber}) - Resetting to 0`;
-      }
-      
-      // Trigger shake animation
-      const calculatorSection = document.querySelector('.calculator');
-      if(calculatorSection) {
-        calculatorSection.style.animation = 'shake 0.3s';
-        setTimeout(() => { calculatorSection.style.animation = ''; }, 300);
-      }
-      
-      // Reset to 0
-      const isLatMode = !document.getElementById('modeToggle').checked;
-      if(isLatMode) {
-        latitudeValue = 0;
-      } else {
-        longitudeValue = 0;
-      }
-      
-      updateCalculatorDisplay();
-      if(window.updateCoordinate) window.updateCoordinate(0);
-      
-      return false;
-    }
-    
-    // If validation passes, call main handler
-    return handleOperatorInput(op);
-  }
-
-  // Game uses manual input - type operator and number in calculator, press Enter to apply
-  // No automatic keyboard interception needed
-
   // Listen for mode toggle changes to update display
   const modeToggle = document.getElementById('modeToggle');
   if(modeToggle) {

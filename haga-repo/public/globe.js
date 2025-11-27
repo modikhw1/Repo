@@ -18,9 +18,6 @@
   let lastMouseX = 0;
   let lastMouseY = 0;
   
-  // Zoom state
-  let globeZoomScale = 1.0; // 1.0 = normal, 1.5 = max zoom
-  
   // Target city for game mode
   let targetCity = null;
   
@@ -57,8 +54,7 @@
   function drawWhole(latValue){
     const cx = canvas.width/2;
     const cy = canvas.height/2;
-    const baseR = Math.max(10, canvas.width/2 - 4);
-    const r = baseR * globeZoomScale; // Apply zoom
+    const r = Math.max(10, canvas.width/2 - 4);
 
     ctx.clearRect(0,0,canvas.width,canvas.height);
     
@@ -148,8 +144,7 @@
 
   function projectLatLon(latDeg, lonDeg, addLatOffset = false, radiusOverride = null){
     const cx = canvas.width/2, cy = canvas.height/2;
-    const baseR = Math.max(10, canvas.width/2 - 4);
-    const r = radiusOverride !== null ? radiusOverride : (baseR * globeZoomScale);
+    const r = radiusOverride !== null ? radiusOverride : Math.max(10, canvas.width/2 - 4);
     
     // Apply globe rotation
     const phi = latDeg * Math.PI/180;
@@ -191,7 +186,7 @@
 
   function drawParallel(latDeg, opts={}){
     const numPoints = 180;
-    const r = opts.radius || (Math.max(10, canvas.width/2 - 4) * globeZoomScale);
+    const r = opts.radius || Math.max(10, canvas.width/2 - 4);
     
     // Sample all points around the latitude circle with z-depth
     const points = [];
@@ -268,7 +263,7 @@
     const numPoints = 180;
     const backPoints = [];
     const frontPoints = [];
-    const r = opts.radius || (Math.max(10, canvas.width/2 - 4) * globeZoomScale);
+    const r = opts.radius || Math.max(10, canvas.width/2 - 4);
     
     // Sample points along the meridian from south to north pole
     for(let i = 0; i <= numPoints; i++){
@@ -718,12 +713,6 @@ out center;`;
   window.setGlobeRotation = function(rotX, rotY) {
     globeRotationX = rotX;
     globeRotationY = rotY;
-    drawWhole(currentLatitude);
-  };
-  
-  // Expose function for game to control globe zoom
-  window.setGlobeZoom = function(zoomScale) {
-    globeZoomScale = Math.max(1.0, Math.min(1.5, zoomScale)); // Clamp between 1.0 and 1.5
     drawWhole(currentLatitude);
   };
 
